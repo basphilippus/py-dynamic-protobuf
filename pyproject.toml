@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "py-minimal-protobuf"
+version = "0.0.1"
+description = "Library with shared domain models in the form of dataclasses with avro schemas, services, controllers and repositories"
+authors = ["Bas Philippus <bas.philippus@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.10"
+
+[tool.poetry.dev-dependencies]
+pytest = "*"
+pytest-cov = "*"
+pytest-mock = "*"
+mypy = "*"
+isort = "*"
+flake8 = "*"
+tox-pipenv = "*"
+autoflake = "*"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
