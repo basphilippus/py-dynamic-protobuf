@@ -1,3 +1,6 @@
+Python minimal Protobuf
+-----
+
 This repository contains a minimal implementation of the Protobuf specification in Python.
 
 The reason for creating this repository is that I have a need for generating on-the-fly dynamic protobuf messages in Python. I have not found any existing libraries that can do this, so I decided to create my own.
@@ -47,6 +50,33 @@ A table of what Python datatypes belong to which wire type can be found here:
 | 4    | END_GROUP          | Deprecated, not implemented             |
 | 5    | FIXED32            | float                                   |
 
+Alternatively you can let thie serializer infer the wire type from the Python datatype by seting determine_wire_types to True:
+
+```python
+from minimal_protobuf import serialize, WireType
+
+message = {
+    1: 0.003,
+    2: {
+        13: 3,
+        14: 1
+    }
+}
+
+serialized_bytes = serialize(message)
+print(serialized_bytes)
+```
+
+Output:
+```
+b'\r\xa6\x9bD;\x12\x04h\x03p\x01'
+```
+
+In this case, the output is the same as in the previous example. 
+
+However, if you use large floats that require the FIXED64 wire type, the serializer won't be able to infer the wire type and serialize it as FIXED32 instead. If you want to avoid this, you can set determine_wire_types to False and specify the wire type manually.
+
+
 Deserializing a message
 -----
 
@@ -66,7 +96,7 @@ Output:
 Future work
 -----
 
-- [ ] Implement (optional) dynamic wire type detection
+- [ ] Implement support for repeated fields
 - [ ] Implement support for packed repeated fields
 - [ ] Implement support for extensions
 - [ ] Implement support for maps

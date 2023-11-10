@@ -2,49 +2,8 @@ import struct
 from minimal_protobuf.constants import most_significant_bit_mask, value_mask, WireType
 
 
-def serialize(protoscope_dict: dict[int, tuple[WireType, int | float | dict]]) -> bytes:
-    # The protoscope_dict should be a dictionary with the field number as key and a tuple of wire type and value as
-    # value. The wire type should be a WireType enum value and the value should be an int, float or dict.
-    # Example:
-    # {
-    #     1: (WireType.FIXED32, 0.003),
-    #     2: (WireType.LENGTH_DELIMITED,
-    #         {
-    #             13: (WireType.VARINT, 3),
-    #             14: (WireType.VARINT, 1)
-    #         })
-    # }
-    serialized_bytes = []
-    for field_number, (wire_type, value) in protoscope_dict.items():
-        # The first 3 bits contain the wire type, the last 5 bits contain the field number,
-        # so we shift the field number 3 bits to the left and add the wire type.
-        # The result is encoded as a varint, as specified in the Protobuf specification.
-        serialized_bytes.extend(encode_varint(field_number << 3 | wire_type.value))
-
-        if wire_type == WireType.VARINT:
-            serialized_bytes.extend(encode_varint(value))
-        elif wire_type == WireType.FIXED32:
-            # The struct module is used to convert the float to a 32-bit float.
-            serialized_bytes.extend(struct.pack('f', value))
-        elif wire_type == WireType.FIXED64:
-            # The struct module is used to convert the float to a 64-bit float.
-            serialized_bytes.extend(struct.pack('d', value))
-        elif wire_type == WireType.LENGTH_DELIMITED:
-            # Length delimited value are either a sub-message or a string.
-            if isinstance(value, dict):
-                serialized_value = serialize(value)
-            else:
-                serialized_value = bytes(value, 'utf-8')
-            # Length delimited values are encoded as a varint containing the length of the value in bytes,
-            # followed by the serialized value itself.
-            serialized_bytes.extend(encode_varint(len(serialized_value)))
-            serialized_bytes.extend(serialized_value)
-
-    return bytes(serialized_bytes)
-
-
-def encode_varint(int_value: int) -> bytes:
-    encoded_value = []
+def _encode_varint(int_value: int) -> bytes:
+    encoded_value: list[int] = []
     # If the int_value is negative, we convert it to a positive value by adding 2^64.
     # This is because Python does not have unsigned integers.
     if int_value < 0:
@@ -68,3 +27,99 @@ def encode_varint(int_value: int) -> bytes:
         int_value = int_value >> 7
 
     return bytes(encoded_value)
+
+
+wire_type_table = {
+    float: WireType.FIXED32,
+    int: WireType.VARINT,
+    bool: WireType.VARINT,
+    dict: WireType.LENGTH_DELIMITED,
+    str: WireType.LENGTH_DELIMITED,
+    bytes: WireType.LENGTH_DELIMITED,
+}
+
+
+def _determine_wire_type(value: int | float | dict) -> WireType | None:
+    return wire_type_table.get(type(value))
+
+
+def serialize(proto_dict: dict[int, tuple[WireType, int | float | dict | bool] | int | float | dict | bool],
+              determine_wire_types=False) -> bytes:
+    """
+    The proto_dict should be a dictionary with the field number as key and a tuple of wire type and value as
+    value. The wire type should be a WireType enum value and the value should be an int, float or dict.
+    Example:
+    {
+        1: (WireType.FIXED32, 0.003),
+        2: (WireType.LENGTH_DELIMITED,
+            {
+                13: (WireType.VARINT, 3),
+                14: (WireType.VARINT, 1)
+            })
+    }
+    The equivalent Protobuf definition would be:
+    message Example {
+        optional float example_float = 1;
+        optional ExampleSubMessage example_sub_message = 2;
+    }
+
+    message ExampleSubMessage {
+        optional int32 example_int32 = 13;
+        optional int32 example_int32 = 14;
+    }
+
+    Alternatively, the proto_dict can be a dictionary with the field number as key and the value as value, in which
+    case the wire type will be determined automatically. The value should be an int, float, dict, str or bytes.
+    Be aware that this can cause incorrect wire types for large floats, which might need to be serialized as
+    64-bit floats.
+    Example:
+    {
+        1: 0.003,
+        2: {
+                13: 3,
+                14: 1
+            }
+    }
+
+    :param proto_dict: The dictionary to serialize.
+    :param determine_wire_types: Whether to determine the wire types automatically.
+    """
+    serialized_bytes: list[int] = []
+    for field_number, value in proto_dict.items():
+        wire_type: WireType | None = None
+        if isinstance(value, tuple):
+            wire_type, value = value
+        elif determine_wire_types:
+            wire_type = _determine_wire_type(value)
+
+        if not wire_type:
+            raise ValueError('Wire type could not be determined for value: {}'.format(value))
+
+        # The first 3 bits contain the wire type, the last 5 bits contain the field number,
+        # so we shift the field number 3 bits to the left and add the wire type.
+        # The result is encoded as a varint, as specified in the Protobuf specification.
+        serialized_bytes.extend(_encode_varint(field_number << 3 | wire_type.value))
+
+        if wire_type.value == WireType.VARINT.value:
+            if isinstance(value, bool):
+                # Booleans are encoded as 0 or 1.
+                value = int(value)
+            serialized_bytes.extend(_encode_varint(value))
+        elif wire_type.value == WireType.FIXED32.value:
+            # The struct module is used to convert the float to a 32-bit float.
+            serialized_bytes.extend(struct.pack('f', value))
+        elif wire_type.value == WireType.FIXED64.value:
+            # The struct module is used to convert the float to a 64-bit float.
+            serialized_bytes.extend(struct.pack('d', value))
+        elif wire_type.value == WireType.LENGTH_DELIMITED.value:
+            # Length delimited value are either a sub-message or a string.
+            if isinstance(value, dict):
+                serialized_value = serialize(value, determine_wire_types=determine_wire_types)
+            else:
+                serialized_value = bytes(value, 'utf-8')
+            # Length delimited values are encoded as a varint containing the length of the value in bytes,
+            # followed by the serialized value itself.
+            serialized_bytes.extend(_encode_varint(len(serialized_value)))
+            serialized_bytes.extend(serialized_value)
+
+    return bytes(serialized_bytes)

@@ -86,6 +86,16 @@ wire_type_table = {
 
 
 def deserialize(byte_blob: bytes) -> dict[int, int | float | dict]:
+    """
+    Deserialize a byte blob into a dictionary.
+    The byte blob should be a valid Protobuf message.
+
+    Example:
+    b'\x08\x96\x01' is a valid Protobuf message, which would be deserialized into {1: 150}.
+
+    :param byte_blob: The byte blob to deserialize.
+    :return: A dictionary containing the deserialized values.
+    """
     deserialized_object = {}
 
     # The wire type is the encoding method used for the next variable.
