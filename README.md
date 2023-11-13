@@ -153,3 +153,4 @@ Future work
 - [ ] Implement support for repeated fields
 - [ ] Implement support for packed repeated fields
 - [ ] Implement support for maps
+- [ ] Parsing .proto definitions and generating Python classes (not sure if I want to do this, it seems outside of the scope of this library)
