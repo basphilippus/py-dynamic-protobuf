@@ -1,4 +1,4 @@
-Python minimal Protobuf
+Python dynamic Protobuf
 -----
 
 This repository contains a minimal implementation of the encoding and decoding of the Protobuf specification in Python.
@@ -56,7 +56,7 @@ message MyOtherMessage {
 You can use the following Python code:
 
 ```python
-from minimal_protobuf import encode, WireType
+from dynamic_protobuf import encode, WireType
 
 message = {
     1: (WireType.FIXED32, 0.003),
@@ -90,7 +90,7 @@ A table of what Python datatypes belong to which wire type can be found here:
 Alternatively you can let the encoder infer the wire type from the Python datatype by setting determine_wire_types to True:
 
 ```python
-from minimal_protobuf import encode
+from dynamic_protobuf import encode
 
 message = {
     1: 0.003,
@@ -120,7 +120,7 @@ Decoding a message
 You can use the following Python code to decode the encoded message from the previous example:
 
 ```python
-from minimal_protobuf import decode
+from dynamic_protobuf import decode
 
 encoded_bytes = b'\r\xa6\x9bD;\x12\x04h\x03p\x01'
 decoded_message = decode(encoded_bytes)

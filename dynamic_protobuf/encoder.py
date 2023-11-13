@@ -1,5 +1,5 @@
 import struct
-from minimal_protobuf.constants import most_significant_bit_mask, value_mask, WireType
+from dynamic_protobuf.constants import most_significant_bit_mask, value_mask, WireType
 
 
 def _encode_varint(int_value: int) -> bytes:

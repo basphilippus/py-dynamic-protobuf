@@ -1,11 +1,11 @@
 [tool.poetry]
-name = "py-minimal-protobuf"
-version = "1.0.0"
-description = "Library with shared domain models in the form of dataclasses with avro schemas, services, controllers and repositories"
+name = "py-dynamic-protobuf"
+version = "1.0.1"
+description = "A Protobuf implementation for Python which can be used to dynamically create messages and encode/decode them to and from binary."
 authors = ["Bas Philippus <bas.philippus@gmail.com>"]
 readme = "README.md"
 packages = [
-    { include = "minimal_protobuf", from = "." },
+    { include = "dynamic_protobuf", from = "." },
 ]
 
 [tool.poetry.dependencies]

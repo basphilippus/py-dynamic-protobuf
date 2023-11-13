@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from minimal_protobuf import decode
+from dynamic_protobuf import decode
 
 test_cases = {
     # basic cases

@@ -1,5 +1,5 @@
 import struct
-from minimal_protobuf.constants import most_significant_bit_mask, value_mask, wire_type_mask
+from dynamic_protobuf.constants import most_significant_bit_mask, value_mask, wire_type_mask
 
 
 def _get_relevant_bytes(byte_blob: bytes, index: int) -> tuple[list[int], int]:

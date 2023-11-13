@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from minimal_protobuf import encode, WireType
+from dynamic_protobuf import encode, WireType
 
 test_cases = {
     # basic cases
