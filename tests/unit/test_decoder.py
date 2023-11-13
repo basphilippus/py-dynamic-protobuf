@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from minimal_protobuf import deserialize
+from minimal_protobuf import decode
 
 test_cases = {
     # basic cases
@@ -39,8 +39,8 @@ test_cases = {
 def test_deserialize(test_case, expected_result):
     print(f'testing use case {test_case}')
     start = time.time()
-    result = deserialize(test_case)
-    print(f'Parsed in {(time.time() - start) * 1_000_000:.6f} microseconds')
+    result = decode(test_case)
+    print(f'Decoded in {(time.time() - start) * 1_000_000:.6f} microseconds')
     print(f'result is: {result}')
     if expected_result.get(1):
         # NaN values do not equal themselves

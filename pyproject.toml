@@ -1,9 +1,12 @@
 [tool.poetry]
 name = "py-minimal-protobuf"
-version = "0.0.1"
+version = "1.0.0"
 description = "Library with shared domain models in the form of dataclasses with avro schemas, services, controllers and repositories"
 authors = ["Bas Philippus <bas.philippus@gmail.com>"]
 readme = "README.md"
+packages = [
+    { include = "minimal_protobuf", from = "." },
+]
 
 [tool.poetry.dependencies]
 python = ">=3.10"

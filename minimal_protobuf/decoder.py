@@ -43,7 +43,7 @@ def _parse_length_delimited(byte_blob: bytes, index: int) -> tuple[int, int]:
     # The first byte of a length delimited value contains the length of the value.
     length = byte_blob[index]
     # The inside of the length delimited value can be processed as a separate byte blob.
-    value = deserialize(byte_blob[index + 1:index + 1 + length])
+    value = decode(byte_blob[index + 1:index + 1 + length])
     return value, index + 1 + length
 
 
@@ -85,18 +85,18 @@ wire_type_table = {
 }
 
 
-def deserialize(byte_blob: bytes) -> dict[int, int | float | dict]:
+def decode(byte_blob: bytes) -> dict[int, int | float | dict]:
     """
-    Deserialize a byte blob into a dictionary.
+    Decode a byte blob into a dictionary.
     The byte blob should be a valid Protobuf message.
 
     Example:
-    b'\x08\x96\x01' is a valid Protobuf message, which would be deserialized into {1: 150}.
+    b'\x08\x96\x01' is a valid Protobuf message, which would be decoded into {1: 150}.
 
-    :param byte_blob: The byte blob to deserialize.
-    :return: A dictionary containing the deserialized values.
+    :param byte_blob: The byte blob to decode.
+    :return: A dictionary containing the decoded values.
     """
-    deserialized_object = {}
+    decoded_object = {}
 
     # The wire type is the encoding method used for the next variable.
     # This is found by looking at the first byte (after a variable).
@@ -120,7 +120,6 @@ def deserialize(byte_blob: bytes) -> dict[int, int | float | dict]:
 
             # Get the relevant bytes for the field number, indicated by the most significant bit.
             relevant_bytes, new_index = _get_relevant_bytes(byte_blob, index)
-            # print_tag_bits(relevant_bytes)
 
             # The first byte contains the first 5 bits of the field number and needs to be treated differently.
             # A mask is applied to get rid of the most significant bit and shifted
@@ -139,8 +138,8 @@ def deserialize(byte_blob: bytes) -> dict[int, int | float | dict]:
             else:
                 raise Exception(f'Unsupported wire type {wire_type_function}')
 
-            deserialized_object[field_number] = value
+            decoded_object[field_number] = value
             wire_type_function = None
             field_number = None
 
-    return deserialized_object
+    return decoded_object

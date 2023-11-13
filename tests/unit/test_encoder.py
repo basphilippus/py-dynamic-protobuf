@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from minimal_protobuf import serialize, WireType
+from minimal_protobuf import encode, WireType
 
 test_cases = {
     # basic cases
@@ -164,12 +164,12 @@ dynamic_wire_type_test_cases = {
 }
 
 @pytest.mark.parametrize('test_case_name, test_case', test_cases.items())
-def test_serialize(test_case_name, test_case):
+def test_encode(test_case_name, test_case):
     test_case, expected_result = test_case
     print(f'testing use case {test_case}')
     start = time.time()
-    result = serialize(test_case)
-    print(f'Serialized in {(time.time() - start) * 1_000_000:.6f} microseconds')
+    result = encode(test_case)
+    print(f'Encoded in {(time.time() - start) * 1_000_000:.6f} microseconds')
     print(f'result is: {result}')
     assert result == expected_result
 
@@ -177,12 +177,12 @@ def test_serialize(test_case_name, test_case):
 
 
 @pytest.mark.parametrize('test_case_name, test_case', dynamic_wire_type_test_cases.items())
-def test_serialize_dynamic_wire_type(test_case_name, test_case):
+def test_encode_dynamic_wire_type(test_case_name, test_case):
     test_case, expected_result = test_case
     print(f'testing use case {test_case}')
     start = time.time()
-    result = serialize(test_case, determine_wire_types=True)
-    print(f'Serialized in {(time.time() - start) * 1_000_000:.6f} microseconds')
+    result = encode(test_case, determine_wire_types=True)
+    print(f'Encoded in {(time.time() - start) * 1_000_000:.6f} microseconds')
     print(f'result is: {result}')
     assert result == expected_result
 

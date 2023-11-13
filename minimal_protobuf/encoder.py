@@ -39,12 +39,12 @@ wire_type_table = {
 }
 
 
-def _determine_wire_type(value: int | float | dict) -> WireType | None:
+def _determine_wire_type(value: int | float | dict | bool) -> WireType | None:
     return wire_type_table.get(type(value))
 
 
-def serialize(proto_dict: dict[int, tuple[WireType, int | float | dict | bool] | int | float | dict | bool],
-              determine_wire_types=False) -> bytes:
+def encode(proto_dict: dict[int, tuple[WireType, int | float | dict | bool] | int | float | dict | bool],
+           determine_wire_types=False) -> bytes:
     """
     The proto_dict should be a dictionary with the field number as key and a tuple of wire type and value as
     value. The wire type should be a WireType enum value and the value should be an int, float or dict.
@@ -70,7 +70,7 @@ def serialize(proto_dict: dict[int, tuple[WireType, int | float | dict | bool] |
 
     Alternatively, the proto_dict can be a dictionary with the field number as key and the value as value, in which
     case the wire type will be determined automatically. The value should be an int, float, dict, str or bytes.
-    Be aware that this can cause incorrect wire types for large floats, which might need to be serialized as
+    Be aware that this can cause incorrect wire types for large floats, which might need to be encoded as
     64-bit floats.
     Example:
     {
@@ -81,10 +81,10 @@ def serialize(proto_dict: dict[int, tuple[WireType, int | float | dict | bool] |
             }
     }
 
-    :param proto_dict: The dictionary to serialize.
+    :param proto_dict: The dictionary to encode.
     :param determine_wire_types: Whether to determine the wire types automatically.
     """
-    serialized_bytes: list[int] = []
+    encoded_bytes: list[int] = []
     for field_number, value in proto_dict.items():
         wire_type: WireType | None = None
         if isinstance(value, tuple):
@@ -98,28 +98,28 @@ def serialize(proto_dict: dict[int, tuple[WireType, int | float | dict | bool] |
         # The first 3 bits contain the wire type, the last 5 bits contain the field number,
         # so we shift the field number 3 bits to the left and add the wire type.
         # The result is encoded as a varint, as specified in the Protobuf specification.
-        serialized_bytes.extend(_encode_varint(field_number << 3 | wire_type.value))
+        encoded_bytes.extend(_encode_varint(field_number << 3 | wire_type.value))
 
         if wire_type.value == WireType.VARINT.value:
             if isinstance(value, bool):
                 # Booleans are encoded as 0 or 1.
                 value = int(value)
-            serialized_bytes.extend(_encode_varint(value))
+            encoded_bytes.extend(_encode_varint(value))
         elif wire_type.value == WireType.FIXED32.value:
             # The struct module is used to convert the float to a 32-bit float.
-            serialized_bytes.extend(struct.pack('f', value))
+            encoded_bytes.extend(struct.pack('f', value))
         elif wire_type.value == WireType.FIXED64.value:
             # The struct module is used to convert the float to a 64-bit float.
-            serialized_bytes.extend(struct.pack('d', value))
+            encoded_bytes.extend(struct.pack('d', value))
         elif wire_type.value == WireType.LENGTH_DELIMITED.value:
             # Length delimited value are either a sub-message or a string.
             if isinstance(value, dict):
-                serialized_value = serialize(value, determine_wire_types=determine_wire_types)
+                encoded_value = encode(value, determine_wire_types=determine_wire_types)
             else:
-                serialized_value = bytes(value, 'utf-8')
+                encoded_value = bytes(value, 'utf-8')
             # Length delimited values are encoded as a varint containing the length of the value in bytes,
-            # followed by the serialized value itself.
-            serialized_bytes.extend(_encode_varint(len(serialized_value)))
-            serialized_bytes.extend(serialized_value)
+            # followed by the encoded value itself.
+            encoded_bytes.extend(_encode_varint(len(encoded_value)))
+            encoded_bytes.extend(encoded_value)
 
-    return bytes(serialized_bytes)
+    return bytes(encoded_bytes)

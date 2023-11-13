@@ -1,3 +1,3 @@
-from deserializer import deserialize
-from serializer import serialize
+from decoder import decode
+from encoder import encode
 from constants import WireType
