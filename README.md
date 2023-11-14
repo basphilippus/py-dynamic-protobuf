@@ -183,4 +183,31 @@ Output:
 Future work
 -----
 
-- [ ] Parsing .proto definitions and generating Python classes
+Parsing
+-----
+
+- [ ] Add support for nested messages
+- [ ] Add support for enums
+- [ ] Add support for oneof
+- [ ] Add support for default values
+- [ ] Add support for imports
+- [ ] Add support for extensions (not sure if this is possible without a file structure)
+- [ ] Add support for services (not sure if this is inside the scope of this library)
+- [ ] Add support for reserved fields
+
+Wont implement:
+
+- Packages
+- Options
+- Any (Not needed with dynamic Protobuf)
+
+
+Encoding
+-----
+
+No future work planned
+
+Decoding
+-----
+
+No future work planned
