@@ -23,6 +23,26 @@ test_cases = {
             1: (WireType.VARINT, False)}
         , b'\x08\x00'),
 
+    # repeated field cases (non-packed)
+    'repeated_field_case_non_packed_1': (
+        {
+            1: (WireType.VARINT, [1, 2, 3])
+        }, b'\x08\x01\x08\x02\x08\x03'),
+    'repeated_field_case_non_packed_2': (
+        {
+            1: (WireType.FIXED32, [1.1, 2.2, 3.3])
+        }, b'\r\xcd\xcc\x8c?\r\xcd\xcc\x0c@\r33S@'),
+
+    # repeated field cases (packed)
+    'repeated_field_case_packed_1': (
+        {
+            1: (WireType.LENGTH_DELIMITED, (WireType.VARINT, [1, 2, 3]))
+        }, b'\n\x03\x01\x02\x03'),
+    'repeated_field_case_packed_2': (
+        {
+            1: (WireType.LENGTH_DELIMITED, (WireType.FIXED32, [1.1, 2.2, 3.3]))
+        }, b'\n\x0c\xcd\xcc\x8c?\xcd\xcc\x0c@33S@'),
+
     # varints of various byte sizes
     'varint_case_1': (
         {
@@ -131,6 +151,15 @@ test_cases = {
         }, b'\r\x00\x00\xc0\x7f\x12\x1c\x08\x01\x12\x06\x08\xa2\xda\xdd\x8c\x06\x18\x00 \x00(\x000\x008\x00@\x00H\x00P'
            b'\x00X\x02'),
 
+    # map case
+    'map_case_1': (
+        {
+            1: (WireType.LENGTH_DELIMITED, [
+                {1: (WireType.LENGTH_DELIMITED, "key_1"), 2: (WireType.VARINT, 0)},
+                {1: (WireType.LENGTH_DELIMITED, "key_2"), 2: (WireType.VARINT, 1)},
+            ])
+        }, b'\n\t\n\x05key_1\x10\x00\n\t\n\x05key_2\x10\x01'),
+
 }
 
 dynamic_wire_type_test_cases = {
@@ -162,6 +191,7 @@ dynamic_wire_type_test_cases = {
         }, b'\r\x00\x00\xc0\x7f\x12\x1c\x08\x01\x12\x06\x08\xa2\xda\xdd\x8c\x06\x18\x00 \x00(\x000\x008\x00@\x00H\x00P'
            b'\x00X\x02'),
 }
+
 
 @pytest.mark.parametrize('test_case_name, test_case', test_cases.items())
 def test_encode(test_case_name, test_case):

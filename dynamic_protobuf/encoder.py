@@ -2,7 +2,7 @@ import struct
 from dynamic_protobuf.constants import most_significant_bit_mask, value_mask, WireType
 
 
-def _encode_varint(int_value: int) -> bytes:
+def _encode_varint(int_value: int) -> list[int]:
     encoded_value: list[int] = []
     # If the int_value is negative, we convert it to a positive value by adding 2^64.
     # This is because Python does not have unsigned integers.
@@ -26,7 +26,7 @@ def _encode_varint(int_value: int) -> bytes:
         # We shift the int_value 7 bits to the right to get rid of the 7 bits we just encoded.
         int_value = int_value >> 7
 
-    return bytes(encoded_value)
+    return encoded_value
 
 
 wire_type_table = {
@@ -41,6 +41,52 @@ wire_type_table = {
 
 def _determine_wire_type(value: int | float | dict | bool) -> WireType | None:
     return wire_type_table.get(type(value))
+
+
+def _encode_value(encoded_bytes: list[int], field_number: int, value: int | float | dict | bool, wire_type: WireType,
+                  packed_repeated_value: bool, determine_wire_types: bool, include_field_number: bool = True):
+
+    # The first 3 bits contain the wire type, the last 5 bits contain the field number,
+    # so we shift the field number 3 bits to the left and add the wire type.
+    # The result is encoded as a varint, as specified in the Protobuf specification.
+    if include_field_number:
+        encoded_bytes.extend(_encode_varint(field_number << 3 | wire_type.value))
+
+    if wire_type.value == WireType.VARINT.value:
+        if isinstance(value, bool):
+            # Booleans are encoded as 0 or 1.
+            value = int(value)
+
+        encoded_bytes.extend(_encode_varint(value))
+    elif wire_type.value == WireType.FIXED32.value:
+        # The struct module is used to convert the float to a 32-bit float.
+        encoded_bytes.extend(struct.pack('f', value))
+    elif wire_type.value == WireType.FIXED64.value:
+        # The struct module is used to convert the float to a 64-bit float.
+        encoded_bytes.extend(struct.pack('d', value))
+    elif wire_type.value == WireType.LENGTH_DELIMITED.value:
+        # Length delimited value are either a sub-message or a string.
+        if packed_repeated_value:
+            # This is a packed repeated value
+            packed_wire_type, packed_list = value
+
+            packed_field_bytes: list[int] = []
+            for packed_value in packed_list:
+                _encode_value(packed_field_bytes, field_number=field_number, value=packed_value,
+                              wire_type=packed_wire_type, packed_repeated_value=False,
+                              determine_wire_types=determine_wire_types, include_field_number=False)
+            length_delimited_value = _encode_varint(len(packed_field_bytes))
+            length_delimited_value.extend(packed_field_bytes)
+            encoded_bytes.extend(length_delimited_value)
+        else:
+            if isinstance(value, dict):
+                encoded_value = encode(value, determine_wire_types=determine_wire_types)
+            else:
+                encoded_value = bytes(value, 'utf-8')
+            # Length delimited values are encoded as a varint containing the length of the value in bytes,
+            # followed by the encoded value itself.
+            encoded_bytes.extend(_encode_varint(len(encoded_value)))
+            encoded_bytes.extend(encoded_value)
 
 
 def encode(proto_dict: dict[int, tuple[WireType, int | float | dict | bool] | int | float | dict | bool],
@@ -95,31 +141,15 @@ def encode(proto_dict: dict[int, tuple[WireType, int | float | dict | bool] | in
         if not wire_type:
             raise ValueError('Wire type could not be determined for value: {}'.format(value))
 
-        # The first 3 bits contain the wire type, the last 5 bits contain the field number,
-        # so we shift the field number 3 bits to the left and add the wire type.
-        # The result is encoded as a varint, as specified in the Protobuf specification.
-        encoded_bytes.extend(_encode_varint(field_number << 3 | wire_type.value))
+        packed_repeated_value = False
+        if isinstance(value, tuple) and isinstance(value[1], list):
+            packed_repeated_value = True
 
-        if wire_type.value == WireType.VARINT.value:
-            if isinstance(value, bool):
-                # Booleans are encoded as 0 or 1.
-                value = int(value)
-            encoded_bytes.extend(_encode_varint(value))
-        elif wire_type.value == WireType.FIXED32.value:
-            # The struct module is used to convert the float to a 32-bit float.
-            encoded_bytes.extend(struct.pack('f', value))
-        elif wire_type.value == WireType.FIXED64.value:
-            # The struct module is used to convert the float to a 64-bit float.
-            encoded_bytes.extend(struct.pack('d', value))
-        elif wire_type.value == WireType.LENGTH_DELIMITED.value:
-            # Length delimited value are either a sub-message or a string.
-            if isinstance(value, dict):
-                encoded_value = encode(value, determine_wire_types=determine_wire_types)
-            else:
-                encoded_value = bytes(value, 'utf-8')
-            # Length delimited values are encoded as a varint containing the length of the value in bytes,
-            # followed by the encoded value itself.
-            encoded_bytes.extend(_encode_varint(len(encoded_value)))
-            encoded_bytes.extend(encoded_value)
+        if not isinstance(value, list):
+            value = [value]
+
+        for list_value in value:
+            _encode_value(encoded_bytes, field_number=field_number, value=list_value, wire_type=wire_type,
+                          packed_repeated_value=packed_repeated_value, determine_wire_types=determine_wire_types)
 
     return bytes(encoded_bytes)

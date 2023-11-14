@@ -1,4 +1,4 @@
-Python dynamic Protobuf
+Python Dynamic Protobuf
 -----
 
 This repository contains a minimal implementation of the encoding and decoding of the Protobuf specification in Python.
@@ -12,11 +12,9 @@ Protobuf encoding consists of two parts:
 1. Compiling a .proto file to a (Python) class that can be used to interface between user code and Protobuf messages, this parts does not encode or decode messages, but instead produces a structure that is similar to the Protoscope format.
 2. Takes the Protoscope format and encodes to- or decodes from the wire format (bytes).
 
-This repository only focuses on the second part, it does not implement .proto file compilation or provide Python classes to interface with .proto definitions.
+Encoding and decoding Protobuf messages do not necessarily require a .proto file or any compilation, however in some cases (like packed repeated fields) a definition is required to decode the message.
 
-Encoding and decoding Protobuf messages do not require a .proto file or any compilation with this library.
-The standard Python Protobuf library uses expensive reflection to encode and decode messages. 
-
+The standard Python Protobuf library uses expensive reflection to encode and decode messages.
 This library uses a simpler approach that is much faster, in some basic benchmarking that I did it was about 200 times faster than the standard Python Protobuf library.
 
 -----
@@ -127,30 +125,62 @@ decoded_message = decode(encoded_bytes)
 print(decoded_message)
 ```
 
-Output (raw):
+Output:
 ```python
 {1: 0.003, 2: {13: 3, 14: 1}}
 ```
 
-Output (formatted):
-```python
-{
-  1: 0.003, 
-  2: {
-      13: 3, 
-      14: 1
-  }
+As you can see, for the output the wire types are not returned. The wire types are part of the encoding and no longer needed after the value has been decoded.
+
+Repeated packed fields can not be decoded without specifying the wire type of the repeated field. This is because the wire type of the repeated field is not encoded in the message, instead the wire type of the repeated field only known in the message definition.
+To decode a repeated packed field with the following proto definition:
+
+```protobuf
+syntax = "proto2";
+
+message MyMessage {
+    repeated int32 my_repeated_int = 1 [packed = true];
 }
 ```
 
-As you can see, for the output the wire types are not returned. The wire types are part of the encoding and no longer needed after the value has been decoded.
+You can use the following code:
+
+```python
+from dynamic_protobuf import decode, DecoderFieldDefinition, WireType
+
+definition = {
+    1: DecoderFieldDefinition.repeated_packed(WireType.VARINT)
+}
+encoded_bytes = b'\n\x03\x01\x02\x03'
+decoded_message = decode(encoded_bytes, definition)
+print(decoded_message)
+```
+
+Output:
+```python
+{1: [1, 2, 3]}
+```
+
+Know that if a definition is provided to the decode function, not all fields need to be defined. 
+
+If a field packed repeated field is not defined, the result is unpredictable. In the best case, the values are represented as a hexidecimal string, in the worst case the decoder will return incorrect results:
+    
+```python
+from dynamic_protobuf import decode
+
+encoded_bytes = b'\n\x03\x01\x02\x03'
+decoded_message = decode(encoded_bytes)
+print(decoded_message)
+```
+
+Output:
+```python
+{1: '010203'}
+```
 
 -----
 
 Future work
 -----
 
-- [ ] Implement support for repeated fields
-- [ ] Implement support for packed repeated fields
-- [ ] Implement support for maps
 - [ ] Parsing .proto definitions and generating Python classes
