@@ -142,6 +142,9 @@ def _parse_32_bit(byte_blob: bytes, index: int,
         elif last_digit == 9:
             # If the last digit is a 9, we round up.
             value = math.ceil(value * seven_decimals) / seven_decimals
+        elif last_digit == -1:
+            # If the last digit is a -1, we do not round, because the value is already rounded.
+            value = value
         else:
             raise Exception(f'Unexpected float error: last digit {last_digit} for value {value}')
     return value, index + 4

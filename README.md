@@ -186,10 +186,8 @@ Future work
 Parsing
 -----
 
-- [ ] Add support for nested messages
-- [ ] Add support for enums
 - [ ] Add support for oneof
-- [ ] Add support for default values
+- [ ] Add support for explicit default values
 - [ ] Add support for imports
 - [ ] Add support for extensions (not sure if this is possible without a file structure)
 - [ ] Add support for services (not sure if this is inside the scope of this library)
