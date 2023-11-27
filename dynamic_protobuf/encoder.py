@@ -82,7 +82,9 @@ def _encode_value(encoded_bytes: list[int], field_number: int, value: int | floa
             if isinstance(value, dict):
                 encoded_value = encode(value, determine_wire_types=determine_wire_types)
             else:
-                encoded_value = bytes(value, 'utf-8')
+                if isinstance(value, str):
+                    value = bytes(value, 'utf-8')
+                encoded_value = value
             # Length delimited values are encoded as a varint containing the length of the value in bytes,
             # followed by the encoded value itself.
             encoded_bytes.extend(_encode_varint(len(encoded_value)))

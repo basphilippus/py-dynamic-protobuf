@@ -114,13 +114,9 @@ class ProtobufMessage:
     def __init__(self, **kwargs):
         self.__dict__.update(self.definition.render(**kwargs))
 
-    def _get_default_value(self, field):
-        if field.type in default_value_table:
-            return default_value_table[field.type]
-        return self.definition.message_classes[field.type.name]()
-
     def _get_proto_dict(self):
         proto_dict = {}
+        message_definition = self.definition.definition.messages.get(self.definition.name)
         for field_number, field in self.definition.fields_by_number.items():
             field_value = getattr(self, field.name, None)
             if field_value and isinstance(field_value, ProtobufMessage):
@@ -131,15 +127,24 @@ class ProtobufMessage:
                 else:
                     field_wire_type = protobuf_type_wire_type_table[field.type]
 
+            original_wire_type = None
+            if field.options.get('packed'):
+                original_wire_type = field_wire_type
+                field_wire_type = WireType.LENGTH_DELIMITED
+
             if not field_value:
                 if field.label == ProtobufLabel.REQUIRED:
-                    default_value = self._get_default_value(field)
+                    default_value = message_definition.get_default_value(field)
                     proto_dict[field_number] = (field_wire_type, default_value)
-                    continue
+
+                continue
 
             if isinstance(field_value, ProtobufMessage):
                 field_value = field_value._get_proto_dict()
-            proto_dict[field_number] = (field_wire_type, field_value)
+            if field.options.get('packed'):
+                proto_dict[field_number] = (field_wire_type, (original_wire_type, field_value))
+            else:
+                proto_dict[field_number] = (field_wire_type, field_value)
         return proto_dict
 
     def encode(self):
@@ -160,8 +165,8 @@ class ProtobufMessage:
         return proto_dict_with_names
 
     @classmethod
-    def decode(cls, byte_blob: bytes):
-        proto_dict = decode(byte_blob)
+    def decode(cls, byte_blob: bytes, definition: dict | None = None):
+        proto_dict = decode(byte_blob, definition)
         proto_dict_with_names = cls._proto_dict_numbers_to_names(proto_dict)
         return cls(**proto_dict_with_names)
 
@@ -188,6 +193,15 @@ class ProtobufMessage:
 
         return True
 
+    def __getattr__(self, item):
+        if item == 'get':
+            return self.__getitem__
+
+        if self.__dict__.get(item):
+            return self.__dict__[item]
+
+        return self.definition.get_default_value(self.definition.fields_by_name[item])
+
 
 class ProtobufEnumDefinition:
 
@@ -207,7 +221,8 @@ class ProtobufField:
                  label: str,
                  _type: str,
                  name: str,
-                 number: int | str):
+                 number: int | str,
+                 comment: str | None = None):
         self.message = message
 
         if isinstance(label, str):
@@ -229,9 +244,16 @@ class ProtobufField:
             number = int(number)
         self.number: int = number
 
+        self.options: dict[str, bool | int | float] = {}
+
+        self.comment = comment
+
     def __repr__(self):
         type_value = self.type.value if isinstance(self.type, ProtobufType) else self.type.name
-        return f'{self.label.value} {type_value} {self.name} = {self.number};'
+        options_string = ''
+        if self.options:
+            options_string = ' [' + ', '.join([f'{key} = {value}' for key, value in self.options.items()]) + ']'
+        return f'{self.label.value} {type_value} {self.name} = {self.number}{options_string};'
 
 
 class ProtobufMessageDefinition:
@@ -245,6 +267,10 @@ class ProtobufMessageDefinition:
         self.fields_by_name = {}
         self.fields_by_number = {}
 
+        self.reserved_field_numbers: set[int] = set()
+
+        self.comments: list[str] = []
+
     def add_field(self, field: ProtobufField):
         self.fields_by_name[field.name] = field
         self.fields_by_number[field.number] = field
@@ -255,11 +281,28 @@ class ProtobufMessageDefinition:
             if field_name not in kwargs:
                 continue
             field_value = kwargs[field_name]
+
+            if field.type == ProtobufType.BYTES and isinstance(field_value, str):
+                field_value = field_value.encode()
+
+            if field.options.get('default') and field_value == self.get_default_value(field):
+                continue
+
             if isinstance(field_value, dict):
                 field_value_dict = field.type.render(**field_value)
                 field_value = self.definition.message_classes[field.type.name](**field_value_dict)
+            if field.type == ProtobufType.BYTES and isinstance(field_value, str):
+                field_value = field_value.encode()
             message_instance[field_name] = field_value
         return message_instance
+
+    def get_default_value(self, field: ProtobufField):
+        if field.options.get('default'):
+            return field.options['default']
+
+        if field.type in default_value_table:
+            return default_value_table[field.type]
+        return self.definition.message_classes[field.type.name]()
 
     def __repr__(self):
         opening_curly_brace = '{'
@@ -271,11 +314,17 @@ class ProtobufDefinition:
 
     def __init__(self):
         self.syntax = None
+
         self.messages = {}
         self.message_classes = {}
+
         self.enums = {}
         self.enum_classes = {}
+
+        self.comments: list[str] = []
+
         self.unknown_references = {}
+        self.unknown_options = {}
 
     def __repr__(self):
         return f'syntax = "{self.syntax}";\n\n' + '\n\n'.join([repr(message) for message in self.messages.values()])

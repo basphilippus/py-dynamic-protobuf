@@ -186,16 +186,18 @@ Future work
 Parsing
 -----
 
-- [ ] Add support for oneof
 - [ ] Add support for explicit default values
+- [ ] Add support for comments
+- [ ] Add support for reserved fields
 - [ ] Add support for imports
+- [ ] Add support for oneof
 - [ ] Add support for extensions (not sure if this is possible without a file structure)
 - [ ] Add support for services (not sure if this is inside the scope of this library)
-- [ ] Add support for reserved fields
+- [ ] Add support for proto3 syntax
 
 Wont implement:
 
-- Packages
+- Packages (Ignored in Python)
 - Options
 - Any (Not needed with dynamic Protobuf)
 
