@@ -186,9 +186,6 @@ Future work
 Parsing
 -----
 
-- [ ] Add support for explicit default values
-- [ ] Add support for comments
-- [ ] Add support for reserved fields
 - [ ] Add support for imports
 - [ ] Add support for oneof
 - [ ] Add support for extensions (not sure if this is possible without a file structure)
