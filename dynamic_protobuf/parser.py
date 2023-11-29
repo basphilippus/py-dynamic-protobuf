@@ -1,14 +1,16 @@
 import re
 
+from imports import ProtobufImporter
 from parser_classes import ProtobufEnumDefinition, ProtobufDefinition, ProtobufMessageDefinition, \
-    ProtobufField, ProtobufMessageType, ProtobufEnumType
+    ProtobufField, ProtobufMessageType, ProtobufEnumType, ProtobufServiceDefinition, ProtobufMethodDefinition
 
 syntax_regex = re.compile(r'syntax = "([^"]+)"')
 message_regex = re.compile(r'message ([a-zA-Z]+) {([^}]+)}')
-field_regex = re.compile(r'(optional|required|repeated) ([a-zA-Z0-9]+) ([a-zA-Z_0-9]+) = ([0-9]+) ?(\[[a-zA-Z]* ?= ?(?:[a-zA-Z0-9-_.,"\']*)\])?;(?:(?: |\n)\/\/ ?([a-zA-Z-0-9 _+-]*))?')
+field_regex = re.compile(r'(optional|required|repeated)?(?: )?([a-zA-Z0-9.]+|(?:map<[a-zA-Z0-9, ]+>)) ([a-zA-Z_0-9]+) = ([0-9]+) ?(\[[a-zA-Z]* ?= ?(?:[a-zA-Z0-9-_.,"\']*)\])?;(?:(?: |\n)\/\/ ?([a-zA-Z-0-9 _+-]*))?')
 enum_regex = re.compile(r'([a-zA-Z0-9_]+) ?= ?([0-9]+);')
 line_regex = re.compile(r'([;{}])')
 equals_regex = re.compile(r'([a-zA-Z0-9\"\']?=[a-zA-Z0-9\"\']?)')
+rpc_regex = re.compile(r'rpc ([a-zA-Z0-9_]+) ?\(([a-zA-Z0-9_]+)\) ?returns ?\(([a-zA-Z0-9_]+)\) ?;')
 
 
 def find_syntax_scope(definition_lines: list[str], line_index) -> tuple[list[str], int]:
@@ -73,13 +75,104 @@ def parse_options(proto_definition: ProtobufDefinition,
     return options
 
 
+def find_oneof_scope(definition_lines: list[str], line_index) -> tuple[list[str], int]:
+    scope = []
+    level = 0
+    for line in [line.strip() for line in definition_lines]:
+        if not line:
+            continue
+        if line.startswith('oneof') and line.endswith('{'):
+            level += 1
+        if line.startswith('}'):
+            level -= 1
+            if level == 0:
+                scope.append(line)
+                break
+        scope.append(line)
+    return scope, line_index + len(scope)
+
+
+def parse_oneof(proto_message: ProtobufMessageDefinition, proto_definition: ProtobufDefinition, scope: list[str]):
+    oneof_name = scope[0].split(' ')[1]
+    if oneof_name.endswith('{'):
+        oneof_name = oneof_name[:-1]
+
+    field_lines = []
+
+    new_line_index = 0
+    message_body = scope[1:]
+    multiline_comment = ""
+    for line_index, line in enumerate(message_body):
+        if line_index < new_line_index:
+            continue
+
+        uncompact_equals = equals_regex.findall(line)
+        if uncompact_equals:
+            for uncompact_equal in uncompact_equals:
+                if len(uncompact_equal) == 3:
+                    # No space on either side of the equals sign
+                    line = line.replace(uncompact_equal, uncompact_equal.replace('=', ' = '))
+                    message_body[line_index] = line
+                elif len(uncompact_equal) == 2:
+                    # Space on one side of the equals sign
+                    if uncompact_equal.startswith('='):
+                        line = line.replace(uncompact_equal, uncompact_equal.replace('=', ' ='))
+                    else:
+                        line = line.replace(uncompact_equal, uncompact_equal.replace('=', '= '))
+                    message_body[line_index] = line
+
+        if line.startswith('message'):
+            sub_scope, new_line_index = find_message_scope(message_body[line_index:], line_index)
+            parse_message(proto_definition, sub_scope)
+        elif line.startswith('oneof'):
+            sub_scope, new_line_index = find_oneof_scope(message_body[line_index:], line_index)
+            parse_message(proto_definition, sub_scope)
+        elif line.startswith('reserved'):
+            parse_reserved(proto_message, line)
+        elif line.startswith('/*'):
+            multiline_comment += line[2:]
+            if line.endswith('*/'):
+                multiline_comment = multiline_comment[:-2]
+                proto_message.comments.append(multiline_comment.strip())
+                multiline_comment = ""
+
+        elif line.startswith('*'):
+            multiline_comment += line[1:]
+            if line.endswith('*/'):
+                multiline_comment = multiline_comment[:-2]
+                proto_message.comments.append(multiline_comment.strip())
+                multiline_comment = ""
+        else:
+            field_lines.append(line)
+
+    found_fields = field_regex.findall('\n'.join(field_lines))
+    parsed_fields = []
+    for found_field in found_fields:
+        label, _type, name, number, option, comment = found_field
+        if not comment:
+            comment = None
+
+        field = ProtobufField(proto_message, label, _type, name, number, comment)
+        proto_message.add_field(field)
+
+        proto_message.oneof_fields[name] = oneof_name
+        parsed_fields.append(field)
+
+        options = {}
+        if option:
+            options = parse_options(proto_definition, field, _type, option)
+        field.options = options
+
+    proto_message.oneofs[oneof_name] = parsed_fields
+
+
 def find_message_scope(definition_lines: list[str], line_index) -> tuple[list[str], int]:
     scope = []
     level = 0
     for line in [line.strip() for line in definition_lines]:
         if not line:
             continue
-        if line.startswith('message') and line.endswith('{'):
+        if (line.startswith('message') or line.startswith('oneof')) and line.endswith('{'):
             level += 1
         if line.startswith('}'):
             level -= 1
@@ -141,6 +234,9 @@ def parse_message(proto_definition: ProtobufDefinition, scope: list[str]):
         if line.startswith('message'):
             sub_scope, new_line_index = find_message_scope(message_body[line_index:], line_index)
             parse_message(proto_definition, sub_scope)
+        elif line.startswith('oneof'):
+            sub_scope, new_line_index = find_oneof_scope(message_body[line_index:], line_index)
+            parse_oneof(proto_message, proto_definition, sub_scope)
         elif line.startswith('reserved'):
             parse_reserved(proto_message, line)
         elif line.startswith('/*'):
@@ -203,31 +299,165 @@ def parse_enum(proto_definition: ProtobufDefinition, scope: list[str]):
         proto_enum.values_by_number[int(found_value[1])] = found_value[0]
 
 
-def find_single_line_comment_scope(definition_lines: list[str], line_index) -> tuple[list[str], int]:
-    return [definition_lines[0]], line_index + 1
-
-
 def parse_single_line_comment(proto_definition: ProtobufDefinition, scope: list[str]):
     comment = scope[0][3:]
     proto_definition.comments.append(comment)
+
+
+def parse_import(proto_definition: ProtobufDefinition, scope: list[str]):
+    import_line = scope[0]
+    importable = import_line.replace('import', '', 1).replace(';', '').replace('"', '').strip()
+    public_import = False
+    if importable.startswith('public '):
+        importable = importable[7:]
+        public_import = True
+    proto_definition.importer.load_import(importable, public_import)
+
+
+def parse_extensions(proto_definition: ProtobufDefinition, scope: list[str]):
+    extensions = scope[0].replace('extensions', '').replace(';', '').strip()
+    if extensions.startswith('max'):
+        extensions = extensions[3:]
+    proto_definition.extensions = extensions
+
+
+def parse_extend(proto_definition: ProtobufDefinition, scope: list[str]):
+    message_name = scope[0].split(' ')[1]
+    if message_name.endswith('{'):
+        message_name = message_name[:-1]
+
+    proto_message = proto_definition.messages.get(message_name)
+
+    field_lines = []
+
+    new_line_index = 0
+    message_body = scope[1:]
+    multiline_comment = ""
+    for line_index, line in enumerate(message_body):
+        if line_index < new_line_index:
+            continue
+
+        uncompact_equals = equals_regex.findall(line)
+        if uncompact_equals:
+            for uncompact_equal in uncompact_equals:
+                if len(uncompact_equal) == 3:
+                    # No space on either side of the equals sign
+                    line = line.replace(uncompact_equal, uncompact_equal.replace('=', ' = '))
+                    message_body[line_index] = line
+                elif len(uncompact_equal) == 2:
+                    # Space on one side of the equals sign
+                    if uncompact_equal.startswith('='):
+                        line = line.replace(uncompact_equal, uncompact_equal.replace('=', ' ='))
+                    else:
+                        line = line.replace(uncompact_equal, uncompact_equal.replace('=', '= '))
+                    message_body[line_index] = line
+
+        if line.startswith('message'):
+            sub_scope, new_line_index = find_message_scope(message_body[line_index:], line_index)
+            parse_message(proto_definition, sub_scope)
+        elif line.startswith('oneof'):
+            sub_scope, new_line_index = find_oneof_scope(message_body[line_index:], line_index)
+            parse_oneof(proto_message, proto_definition, sub_scope)
+        elif line.startswith('reserved'):
+            parse_reserved(proto_message, line)
+        elif line.startswith('/*'):
+            multiline_comment += line[2:]
+            if line.endswith('*/'):
+                multiline_comment = multiline_comment[:-2]
+                proto_message.comments.append(multiline_comment.strip())
+                multiline_comment = ""
+
+        elif line.startswith('*'):
+            multiline_comment += line[1:]
+            if line.endswith('*/'):
+                multiline_comment = multiline_comment[:-2]
+                proto_message.comments.append(multiline_comment.strip())
+                multiline_comment = ""
+        else:
+            field_lines.append(line)
+
+    found_fields = field_regex.findall('\n'.join(field_lines))
+    for found_field in found_fields:
+        label, _type, name, number, option, comment = found_field
+        if not comment:
+            comment = None
+
+        field = ProtobufField(proto_message, label, _type, name, number, comment)
+        proto_message.add_field(field)
+
+        options = {}
+        if option:
+            options = parse_options(proto_definition, field, _type, option)
+        field.options = options
+
+
+def find_service_scope(definition_lines: list[str], line_index) -> tuple[list[str], int]:
+    scope = []
+    level = 0
+    for line in [line.strip() for line in definition_lines]:
+        if not line:
+            continue
+        if line.endswith('{'):
+            level += 1
+        if line.startswith('}'):
+            level -= 1
+            if level == 0:
+                scope.append(line)
+                break
+        scope.append(line)
+    return scope, line_index + len(scope)
+
+
+def parse_service(proto_definition: ProtobufDefinition, scope: list[str]):
+    service_name = scope[0].split(' ')[1]
+    if service_name.endswith('{'):
+        service_name = service_name[:-1]
+
+    protobuf_service = ProtobufServiceDefinition(proto_definition, service_name)
+
+    found_methods = rpc_regex.findall('\n'.join(scope))
+    for found_method in found_methods:
+        method_name, request_type, response_type = found_method
+        method_definition = ProtobufMethodDefinition(proto_definition, method_name, request_type, response_type)
+        protobuf_service.methods[method_name] = method_definition
+
+    proto_definition.services[service_name] = protobuf_service
+
+
+def single_line_scope(definition_lines: list[str], line_index) -> tuple[list[str], int]:
+    return [definition_lines[0]], line_index + 1
 
 
 keywords = {
     'syntax': (find_syntax_scope, parse_syntax),
     'message': (find_message_scope, parse_message),
     'enum': (find_enum_scope, parse_enum),
-    '//': (find_single_line_comment_scope, parse_single_line_comment),
+    'import': (single_line_scope, parse_import),
+    '//': (single_line_scope, parse_single_line_comment),
+    'extensions': (single_line_scope, parse_extensions),
+    'extend': (find_message_scope, parse_extend),
+    'service': (find_service_scope, parse_service),
+    
+    # Packages are ignored
+    'package': (single_line_scope, lambda proto_definition, scope: None),
+    # Options are ignored
+    'option': (single_line_scope, lambda proto_definition, scope: None),
 }
 
 
-def _parse_definition(definition: str) -> ProtobufDefinition:
+def _parse_definition(definition: str, imports_path: str | None, import_level: int) -> ProtobufDefinition:
     proto_definition = ProtobufDefinition()
+    proto_definition.importer = ProtobufImporter(proto_definition, imports_path, import_level)
 
     new_line_index = 0
 
     lines = []
     definition_lines = definition.split('\n')
     for line_index, line in enumerate(definition_lines):
+        if line.startswith('//'):
+            lines.append(line)
+            continue
+
         capture_groups = line_regex.split(line)
         if len(capture_groups) % 2 == 1:
             capture_groups.append('')
@@ -262,27 +492,52 @@ def _parse_definition(definition: str) -> ProtobufDefinition:
         statements = [statement for statement in line.split(' ') if statement]
         if statements:
             keyword = statements[0]
-            scope_function, parse_function = keywords.get(keyword)
+            try:
+                scope_function, parse_function = keywords.get(keyword)
+            except TypeError:
+                raise Exception(f'Unknown statement: {keyword}')
+
             scope, new_line_index = scope_function(lines[line_index:], line_index)
             parse_function(proto_definition, scope)
 
     return proto_definition
 
 
-def parse(definition: str) -> ProtobufDefinition:
-    proto_definition = _parse_definition(definition)
+def build_message_classes(proto_definition: ProtobufDefinition):
+    for message_name, message_definition in proto_definition.messages.items():
+        if isinstance(message_definition, ProtobufDefinition):
+            build_message_classes(message_definition)
+            proto_definition.message_classes[message_name] = message_definition
+            for sub_message_class_name, sub_message_class_definition in message_definition.message_classes.items():
+                proto_definition.message_classes[sub_message_class_name] = sub_message_class_definition
+        else:
+            proto_definition.message_classes[message_name] = ProtobufMessageType(message_name,
+                                                                                 message_definition=message_definition)
+
+    for enum_name, enum_definition in proto_definition.enums.items():
+        proto_definition.enum_classes[enum_name] = ProtobufEnumType(enum_name, enum_definition=enum_definition)
+
+
+def parse(definition: str, imports_path: str | None = None, import_level: int = 0) -> ProtobufDefinition:
+    proto_definition = _parse_definition(definition, imports_path, import_level)
 
     to_be_removed_unknown_references = []
     for unknown_field, unknown_message_name in proto_definition.unknown_references.items():
         message_type = proto_definition.messages.get(unknown_message_name)
         if message_type:
-            unknown_field.type = message_type
+            if isinstance(unknown_field.type, tuple):
+                unknown_field.type = (unknown_field.type[0], message_type)
+            else:
+                unknown_field.type = message_type
             to_be_removed_unknown_references.append(unknown_field)
             continue
 
         enum_type = proto_definition.enums.get(unknown_message_name)
         if enum_type:
-            unknown_field.type = enum_type
+            if isinstance(unknown_field.type, tuple):
+                unknown_field.type = (unknown_field.type[0], enum_type)
+            else:
+                unknown_field.type = enum_type
             to_be_removed_unknown_references.append(unknown_field)
             continue
 
@@ -311,11 +566,16 @@ def parse(definition: str) -> ProtobufDefinition:
     if proto_definition.unknown_options:
         raise Exception(f'Unknown options: {proto_definition.unknown_options}')
 
-    for message_name, message_definition in proto_definition.messages.items():
-        proto_definition.message_classes[message_name] = ProtobufMessageType(message_name,
-                                                                             message_definition=message_definition)
+    for service_name, service in proto_definition.services.items():
+        for method_name, method in service.methods.items():
+            message_type = proto_definition.messages.get(method.input_type)
+            if message_type:
+                method.input_type = message_type
 
-    for enum_name, enum_definition in proto_definition.enums.items():
-        proto_definition.enum_classes[enum_name] = ProtobufEnumType(enum_name, enum_definition=enum_definition)
+            message_type = proto_definition.messages.get(method.output_type)
+            if message_type:
+                method.output_type = message_type
+
+    build_message_classes(proto_definition)
 
     return proto_definition

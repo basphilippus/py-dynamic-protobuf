@@ -485,15 +485,60 @@ message ExampleSubMessage {
     print('test_parser_reserved_fields is valid!')
 
 
-def test_parser_imports():
+def test_parser_imports_with_local_files():
+    proto_definition = """syntax = "proto2";
+import "custom_import.proto";
+    
+message Example {
+    optional float example_float = 1;
+    optional ExampleSubMessage example_sub_message = 2;
+}
+"""
+
+    start = time.time()
+    result = parse(proto_definition, imports_path='imports')
+    print(f'Parsed in {(time.time() - start) * 1_000_000:.6f} microseconds')
+
+    assert result.messages['Example'].fields_by_name['example_float'].type == ProtobufType.FLOAT
+    assert result.messages['Example'].fields_by_name['example_sub_message'].type == result.messages['ExampleSubMessage']
+
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_1'].label == ProtobufLabel.OPTIONAL
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_1'].type == ProtobufType.INT32
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_1'].name == 'example_int_1'
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_1'].number == 13
+
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_2'].label == ProtobufLabel.REQUIRED
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_2'].type == ProtobufType.INT32
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_2'].name == 'example_int_2'
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_2'].number == 14
+
+    assert result.messages['Example'].fields_by_name['example_sub_message'].type == result.messages['ExampleSubMessage']
+
+    proto_message = result.Example(
+        example_timestamp=2.0,
+        example_sub_message=result.ExampleSubMessage(
+            example_int_1=1,
+            example_int_2=2
+        )
+    )
+
+    encoded_message = proto_message.encode()
+    decoded_message = result.Example.decode(encoded_message)
+
+    assert proto_message == decoded_message
+
+    print('test_parser_imports is valid!')
+
+
+def test_parser_imports_with_local_files_file_structure():
     proto_definition = """syntax = "proto2";
 import "google/protobuf/timestamp.proto";
-    
+
 message Example {
     optional google.protobuf.Timestamp example_timestamp = 1;
     optional ExampleSubMessage example_sub_message = 2;
 }
-    
+
 message ExampleSubMessage {
     optional int32 example_int_1 = 13;
     required int32 example_int_2 = 14;
@@ -501,12 +546,11 @@ message ExampleSubMessage {
 """
 
     start = time.time()
-    result = parse(proto_definition, include_imports=True)
+    result = parse(proto_definition, imports_path='imports')
     print(f'Parsed in {(time.time() - start) * 1_000_000:.6f} microseconds')
-    assert len(result.imports) == 1
-    assert result.imports[0] == 'google/protobuf/timestamp.proto'
 
-    assert result.messages['Example'].fields_by_name['example_timestamp'].type == result.messages['google.protobuf.Timestamp']
+    assert result.messages['Example'].fields_by_name['example_timestamp'].type == result.messages[
+        'google.protobuf.Timestamp']
     assert result.messages['Example'].fields_by_name['example_sub_message'].type == result.messages['ExampleSubMessage']
 
     assert result.messages['ExampleSubMessage'].fields_by_name['example_int_1'].label == ProtobufLabel.OPTIONAL
@@ -537,6 +581,145 @@ message ExampleSubMessage {
     print('test_parser_imports is valid!')
 
 
+def test_parser_public_import():
+    proto_definition = """syntax = "proto2";
+import "public_import.proto";
+
+message Example {
+    optional float example_float = 1;
+    optional ExampleSubMessage example_sub_message = 2;
+}
+"""
+
+    start = time.time()
+    result = parse(proto_definition, imports_path='imports')
+    print(f'Parsed in {(time.time() - start) * 1_000_000:.6f} microseconds')
+
+    assert result.messages['Example'].fields_by_name['example_float'].type == ProtobufType.FLOAT
+    assert result.messages['Example'].fields_by_name['example_sub_message'].type == result.messages['ExampleSubMessage']
+
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_1'].label == ProtobufLabel.OPTIONAL
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_1'].type == ProtobufType.INT32
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_1'].name == 'example_int_1'
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_1'].number == 13
+
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_2'].label == ProtobufLabel.REQUIRED
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_2'].type == ProtobufType.INT32
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_2'].name == 'example_int_2'
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_2'].number == 14
+
+    assert result.messages['Example'].fields_by_name['example_sub_message'].type == result.messages['ExampleSubMessage']
+
+    assert result.messages.get('OtherMessage') is None
+
+    proto_message = result.Example(
+        example_timestamp=2.0,
+        example_sub_message=result.ExampleSubMessage(
+            example_int_1=1,
+            example_int_2=2
+        )
+    )
+
+    encoded_message = proto_message.encode()
+    decoded_message = result.Example.decode(encoded_message)
+
+    assert proto_message == decoded_message
+
+    print('test_parser_imports is valid!')
+
+
+def test_parser_imports_with_remote_files():
+    proto_definition = """syntax = "proto2";
+import "google/protobuf/timestamp.proto";
+
+message Example {
+    optional google.protobuf.Timestamp example_timestamp = 1;
+    optional ExampleSubMessage example_sub_message = 2;
+}
+
+message ExampleSubMessage {
+    optional int32 example_int_1 = 13;
+    required int32 example_int_2 = 14;
+}
+"""
+
+    start = time.time()
+    result = parse(proto_definition)
+    print(f'Parsed in {(time.time() - start) * 1_000_000:.6f} microseconds')
+
+    assert result.messages['Example'].fields_by_name['example_timestamp'].type == result.messages[
+        'google.protobuf.Timestamp']
+    assert result.messages['Example'].fields_by_name['example_sub_message'].type == result.messages['ExampleSubMessage']
+
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_1'].label == ProtobufLabel.OPTIONAL
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_1'].type == ProtobufType.INT32
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_1'].name == 'example_int_1'
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_1'].number == 13
+
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_2'].label == ProtobufLabel.REQUIRED
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_2'].type == ProtobufType.INT32
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_2'].name == 'example_int_2'
+    assert result.messages['ExampleSubMessage'].fields_by_name['example_int_2'].number == 14
+
+    assert result.messages['Example'].fields_by_name['example_sub_message'].type == result.messages['ExampleSubMessage']
+
+    proto_message = result.Example(
+        example_timestamp=result.google.protobuf.Timestamp(seconds=1, nanos=2),
+        example_sub_message=result.ExampleSubMessage(
+            example_int_1=1,
+            example_int_2=2
+        )
+    )
+
+    encoded_message = proto_message.encode()
+    decoded_message = result.Example.decode(encoded_message)
+
+    assert proto_message == decoded_message
+
+    print('test_parser_imports is valid!')
+
+
+def test_parser_extension():
+    proto_definition = """syntax = "proto2";
+
+import extension.proto;
+
+extend ExtendableMessage {
+    optional float example_float = 2;
+}
+"""
+
+    start = time.time()
+    result = parse(proto_definition, imports_path='imports')
+    print(f'Parsed in {(time.time() - start) * 1_000_000:.6f} microseconds')
+
+    assert result.syntax == 'proto2'
+    assert result.messages['ExtendableMessage'].fields_by_name['example_int_1'].label == ProtobufLabel.OPTIONAL
+    assert result.messages['ExtendableMessage'].fields_by_name['example_int_1'].type == ProtobufType.INT32
+    assert result.messages['ExtendableMessage'].fields_by_name['example_int_1'].name == 'example_int_1'
+    assert result.messages['ExtendableMessage'].fields_by_name['example_int_1'].number == 1
+
+    assert result.messages['ExtendableMessage'].fields_by_name['example_float'].label == ProtobufLabel.OPTIONAL
+    assert result.messages['ExtendableMessage'].fields_by_name['example_float'].type == ProtobufType.FLOAT
+    assert result.messages['ExtendableMessage'].fields_by_name['example_float'].name == 'example_float'
+    assert result.messages['ExtendableMessage'].fields_by_name['example_float'].number == 2
+
+    proto_message = result.ExtendableMessage(
+        example_float=1.0,
+        example_int_1=1,
+    )
+
+    assert proto_message.example_int_1 == 1
+    assert proto_message.example_float == 1.0
+
+    encoded_message = proto_message.encode()
+    decoded_message = result.ExtendableMessage.decode(encoded_message)
+
+    assert proto_message == decoded_message
+
+    print('test_parser_extension is valid!')
+
+
 def test_parser_oneof():
     proto_definition = """syntax = "proto2";
 message Example {
@@ -558,20 +741,22 @@ message Example {
     assert result.messages['Example'].fields_by_name['example_float'].name == 'example_float'
     assert result.messages['Example'].fields_by_name['example_float'].number == 1
 
-    assert result.messages['Example'].fields_by_name['example_int_1'].label == ProtobufLabel.ONEOF
     assert result.messages['Example'].fields_by_name['example_int_1'].type == ProtobufType.INT32
     assert result.messages['Example'].fields_by_name['example_int_1'].name == 'example_int_1'
     assert result.messages['Example'].fields_by_name['example_int_1'].number == 13
 
-    assert result.messages['Example'].fields_by_name['example_int_2'].label == ProtobufLabel.ONEOF
     assert result.messages['Example'].fields_by_name['example_int_2'].type == ProtobufType.INT32
     assert result.messages['Example'].fields_by_name['example_int_2'].name == 'example_int_2'
     assert result.messages['Example'].fields_by_name['example_int_2'].number == 14
 
     proto_message = result.Example(
         example_float=1.0,
-        example_int_1=1
+        example_int_1=1,
+        example_int_2=2,
     )
+
+    assert proto_message.example_int_1 == 0
+    assert proto_message.example_int_2 == 2
 
     encoded_message = proto_message.encode()
     decoded_message = result.Example.decode(encoded_message)
@@ -600,12 +785,9 @@ message Example {
     assert result.messages['Example'].fields_by_name['example_float'].number == 1
 
     assert result.messages['Example'].fields_by_name['example_map'].label == ProtobufLabel.OPTIONAL
-    assert result.messages['Example'].fields_by_name['example_map'].type == ProtobufType.MAP
+    assert result.messages['Example'].fields_by_name['example_map'].type == (ProtobufType.INT32, ProtobufType.INT32)
     assert result.messages['Example'].fields_by_name['example_map'].name == 'example_map'
     assert result.messages['Example'].fields_by_name['example_map'].number == 2
-
-    assert result.messages['Example'].fields_by_name['example_map'].type.key_type == ProtobufType.INT32
-    assert result.messages['Example'].fields_by_name['example_map'].type.value_type == ProtobufType.INT32
 
     proto_message = result.Example(
         example_float=1.0,
@@ -622,3 +804,86 @@ message Example {
     assert proto_message == decoded_message
 
     print('test_parser_map is valid!')
+
+
+def test_parser_map_sub_message():
+    proto_definition = """syntax = "proto2";
+message Example {
+    optional float example_float = 1;
+    optional map<int32, ExampleSubMessage> example_map = 2;
+}
+
+message ExampleSubMessage {
+    optional int32 example_int_1 = 13;
+    required int32 example_int_2 = 14;
+}
+"""
+
+    start = time.time()
+    result = parse(proto_definition)
+    print(f'Parsed in {(time.time() - start) * 1_000_000:.6f} microseconds')
+
+    assert result.syntax == 'proto2'
+    assert result.messages['Example'].fields_by_name['example_float'].label == ProtobufLabel.OPTIONAL
+    assert result.messages['Example'].fields_by_name['example_float'].type == ProtobufType.FLOAT
+    assert result.messages['Example'].fields_by_name['example_float'].name == 'example_float'
+    assert result.messages['Example'].fields_by_name['example_float'].number == 1
+
+    assert result.messages['Example'].fields_by_name['example_map'].label == ProtobufLabel.OPTIONAL
+    assert result.messages['Example'].fields_by_name['example_map'].type == (ProtobufType.INT32, result.messages['ExampleSubMessage'])
+    assert result.messages['Example'].fields_by_name['example_map'].name == 'example_map'
+    assert result.messages['Example'].fields_by_name['example_map'].number == 2
+
+    proto_message = result.Example(
+        example_float=1.0,
+        example_map={
+            1: result.ExampleSubMessage(
+                example_int_1=1,
+                example_int_2=2
+            ),
+            2: result.ExampleSubMessage(
+                example_int_1=3,
+                example_int_2=4
+            ),
+            3: result.ExampleSubMessage(
+                example_int_1=5,
+                example_int_2=6
+            ),
+        }
+    )
+
+    encoded_message = proto_message.encode()
+    decoded_message = result.Example.decode(encoded_message)
+
+    assert proto_message == decoded_message
+
+    print('test_parser_map is valid!')
+
+
+def test_parser_service():
+    proto_definition = """syntax = "proto2";
+service Example {
+    rpc ExampleMethod (ExampleRequest) returns (ExampleResponse);
+}
+
+message ExampleRequest {
+    optional float example_float = 1;
+}
+    
+message ExampleResponse {
+    optional float example_float = 1;
+}
+"""
+
+    start = time.time()
+    result = parse(proto_definition)
+    print(f'Parsed in {(time.time() - start) * 1_000_000:.6f} microseconds')
+
+    assert len(result.services) == 1
+    assert result.services['Example'].name == 'Example'
+    assert len(result.services['Example'].methods) == 1
+    assert result.services['Example'].methods['ExampleMethod'].name == 'ExampleMethod'
+    assert result.services['Example'].methods['ExampleMethod'].input_type == result.messages['ExampleRequest']
+    assert result.services['Example'].methods['ExampleMethod'].output_type == result.messages['ExampleResponse']
+
+    print('test_parser_service is valid!')

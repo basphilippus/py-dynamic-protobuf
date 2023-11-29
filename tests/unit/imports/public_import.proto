@@ -1,0 +1,2 @@
+import public "custom_import.proto";
+import "other_import.proto";

@@ -186,16 +186,15 @@ Future work
 Parsing
 -----
 
-- [ ] Add support for imports
-- [ ] Add support for oneof
-- [ ] Add support for extensions (not sure if this is possible without a file structure)
-- [ ] Add support for services (not sure if this is inside the scope of this library)
+- [ ] Add support for working services and rpc (Not sure if this is within the scope of this project)
+- [ ] Make sure errors are raised when the input is invalid
+- [ ] Make sure errors are raised when the definition is invalid
 - [ ] Add support for proto3 syntax
 
 Wont implement:
 
 - Packages (Ignored in Python)
-- Options
+- Option statements
 - Any (Not needed with dynamic Protobuf)
 
 

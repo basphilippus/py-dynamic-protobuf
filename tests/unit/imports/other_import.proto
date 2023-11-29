@@ -1,0 +1,6 @@
+syntax = "proto2";
+
+message OtherMessage {
+    optional int32 other_example_int_1 = 1;
+    required int32 other_example_int_2 = 2;
+}

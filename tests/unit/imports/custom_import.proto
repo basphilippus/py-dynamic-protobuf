@@ -1,0 +1,6 @@
+syntax = "proto2";
+
+message ExampleSubMessage {
+    optional int32 example_int_1 = 13;
+    required int32 example_int_2 = 14;
+}

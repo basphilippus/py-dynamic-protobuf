@@ -1,0 +1,6 @@
+syntax = "proto2";
+
+message ExtendableMessage {
+    optional int32 example_int_1 = 1;
+    extensions 2 to 5 [verification = DECLARATION];
+}
