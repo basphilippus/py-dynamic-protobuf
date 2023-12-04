@@ -17,7 +17,10 @@ def _encode_varint(int_value: int) -> list[int]:
         if (int_value >> 7) > 0:
             # We apply the value mask using the & operator to get only the value bits. After that, we apply the
             # most significant bit mask using the | operator to set the most significant bit to 1.
-            encoded_value.append((int_value & value_mask) | most_significant_bit_mask)
+            value = (int_value & value_mask) | most_significant_bit_mask
+            encoded_value.append(value)
+            # if value == int_value:
+            #     break
         else:
             # If the most significant bit is 0, this is the last byte.
             encoded_value.append(int_value & value_mask)
@@ -36,6 +39,7 @@ wire_type_table = {
     dict: WireType.LENGTH_DELIMITED,
     str: WireType.LENGTH_DELIMITED,
     bytes: WireType.LENGTH_DELIMITED,
+    list: WireType.LENGTH_DELIMITED,
 }
 
 

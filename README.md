@@ -195,7 +195,6 @@ Wont implement:
 
 - Packages (Ignored in Python)
 - Option statements
-- Any (Not needed with dynamic Protobuf)
 
 
 Encoding

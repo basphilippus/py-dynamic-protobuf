@@ -52,7 +52,7 @@ class ProtobufImporter:
             return
 
         from dynamic_protobuf import parse
-        from parser_classes import ProtobufDefinition
+        from protobuf_definition import ProtobufDefinition
 
         import_folder: str = os.path.dirname(importable).replace('/', '.')
         import_protobuf_definition = parse(file_content, self.import_path, import_level=self.import_level + 1)

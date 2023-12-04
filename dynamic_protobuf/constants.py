@@ -1,3 +1,4 @@
+import os
 from enum import Enum
 
 # A mask for getting only the most significant bit (continuation bit).
@@ -21,3 +22,6 @@ class WireType(Enum):
     FIXED64 = 1
     LENGTH_DELIMITED = 2
     FIXED32 = 5
+
+
+PACKING_BACKEND = os.getenv('PY_DYNAMIC_PROTOBUF_ANY_PACKING_BACKEND', 'pickle')

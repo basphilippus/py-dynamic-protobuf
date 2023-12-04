@@ -10,6 +10,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = ">=3.10"
+jsonpickle = "*"
 
 [tool.poetry.dev-dependencies]
 pytest = "*"

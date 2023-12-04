@@ -1,8 +1,9 @@
 import re
 
 from imports import ProtobufImporter
-from parser_classes import ProtobufEnumDefinition, ProtobufDefinition, ProtobufMessageDefinition, \
-    ProtobufField, ProtobufMessageType, ProtobufEnumType, ProtobufServiceDefinition, ProtobufMethodDefinition
+from protobuf_definition import ProtobufEnumDefinition, ProtobufDefinition, ProtobufMessageDefinition, \
+    ProtobufField, ProtobufServiceDefinition, ProtobufMethodDefinition
+from protobuf_instance import ProtobufMessageType, ProtobufEnumType
 
 syntax_regex = re.compile(r'syntax = "([^"]+)"')
 message_regex = re.compile(r'message ([a-zA-Z]+) {([^}]+)}')
@@ -424,6 +425,13 @@ def parse_service(proto_definition: ProtobufDefinition, scope: list[str]):
     proto_definition.services[service_name] = protobuf_service
 
 
+def parse_package(proto_definition: ProtobufDefinition, scope: list[str]):
+    package_name = scope[0].split(' ')[1]
+    if package_name.endswith(';'):
+        package_name = package_name[:-1]
+    proto_definition.package = package_name
+
+
 def single_line_scope(definition_lines: list[str], line_index) -> tuple[list[str], int]:
     return [definition_lines[0]], line_index + 1
 
@@ -437,9 +445,8 @@ keywords = {
     'extensions': (single_line_scope, parse_extensions),
     'extend': (find_message_scope, parse_extend),
     'service': (find_service_scope, parse_service),
-    
-    # Packages are ignored
-    'package': (single_line_scope, lambda proto_definition, scope: None),
+    'package': (single_line_scope, parse_package),
+
     # Options are ignored
     'option': (single_line_scope, lambda proto_definition, scope: None),
 }

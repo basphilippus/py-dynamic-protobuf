@@ -1,8 +1,9 @@
+import os
 import time
 
 from dynamic_protobuf import parse, DecoderFieldDefinition, WireType
 from parser import ProtobufMessageDefinition
-from parser_classes import ProtobufLabel, ProtobufType
+from protobuf_definition_types import ProtobufLabel, ProtobufType
 
 
 def test_parser_basic_case():
@@ -718,6 +719,124 @@ extend ExtendableMessage {
     assert proto_message == decoded_message
 
     print('test_parser_extension is valid!')
+
+
+class PackableValue:
+    def __init__(self,
+                 value: int,
+                 value_2: float,
+                 value_3: str,
+                 value_4: bytes,
+                 value_5: bool):
+        self.value = value
+        self.value_2 = value_2
+        self.value_3 = value_3
+        self.value_4 = value_4
+        self.value_5 = value_5
+
+    def __eq__(self, other):
+        return self.value == other.value and \
+               self.value_2 == other.value_2 and \
+               self.value_3 == other.value_3 and \
+               self.value_4 == other.value_4 and \
+               self.value_5 == other.value_5
+
+
+def test_any_pickle():
+    proto_definition = """syntax = "proto2";
+
+import "google/protobuf/any.proto";
+
+message Example {
+    optional google.protobuf.Any example_any = 1;
+}
+"""
+
+    start = time.time()
+    result = parse(proto_definition, imports_path='imports')
+    print(f'Parsed in {(time.time() - start) * 1_000_000:.6f} microseconds')
+
+    assert result.syntax == 'proto2'
+    assert result.messages['Example'].fields_by_name['example_any'].label == ProtobufLabel.OPTIONAL
+    assert result.messages['Example'].fields_by_name['example_any'].type == result.messages['google.protobuf.Any']
+    assert result.messages['Example'].fields_by_name['example_any'].name == 'example_any'
+    assert result.messages['Example'].fields_by_name['example_any'].number == 1
+
+    packable_value = PackableValue(
+        value=1,
+        value_2=2.0,
+        value_3='test',
+        value_4=b'test',
+        value_5=True
+    )
+    proto_message = result.Example(
+        example_any=result.google.protobuf.Any.pack(packable_value)
+    )
+
+    assert proto_message.example_any.type_url == 'type.googleapis.com/Example'
+    assert proto_message.example_any.value == (b'\n\x12\n\x05value\x12\t3int\x80\x04K\x01.\n&\n\x07value_2\x12'
+                                               b'\x1b5float\x80\x04\x95\n\x00\x00\x00\x00\x00\x00\x00G@\x00\x00'
+                                               b'\x00\x00\x00\x00\x00.\n"\n\x07value_3\x12\x173str\x80\x04\x95'
+                                               b'\x08\x00\x00\x00\x00\x00\x00\x00\x8c\x04test\x94.\n$\n\x07value_4'
+                                               b'\x12\x195bytes\x80\x04\x95\x08\x00\x00\x00\x00\x00\x00\x00C'
+                                               b'\x04test\x94.\n\x14\n\x07value_5\x12\t4bool\x80\x04\x88.')
+
+    encoded_message = proto_message.encode()
+    decoded_message = result.Example.decode(encoded_message)
+
+    assert proto_message == decoded_message
+    decoded_packable_value = decoded_message.example_any.unpack(PackableValue)
+    assert packable_value == decoded_packable_value
+
+    print('test_any_pickle is valid!')
+
+
+def test_any_jsonpickle():
+    proto_definition = """syntax = "proto2";
+
+import "google/protobuf/any.proto";
+
+message Example {
+    optional google.protobuf.Any example_any = 1;
+}
+"""
+    import constants
+    constants.PACKING_BACKEND = 'jsonpickle'
+
+    start = time.time()
+    result = parse(proto_definition, imports_path='imports')
+    print(f'Parsed in {(time.time() - start) * 1_000_000:.6f} microseconds')
+
+    assert result.syntax == 'proto2'
+    assert result.messages['Example'].fields_by_name['example_any'].label == ProtobufLabel.OPTIONAL
+    assert result.messages['Example'].fields_by_name['example_any'].type == result.messages['google.protobuf.Any']
+    assert result.messages['Example'].fields_by_name['example_any'].name == 'example_any'
+    assert result.messages['Example'].fields_by_name['example_any'].number == 1
+
+    packable_value = PackableValue(
+        value=1,
+        value_2=2.0,
+        value_3='test',
+        value_4=b'test',
+        value_5=True
+    )
+    proto_message = result.Example(
+        example_any=result.google.protobuf.Any.pack(packable_value)
+    )
+
+    assert proto_message.example_any.type_url == 'type.googleapis.com/Example'
+    assert proto_message.example_any.value == (b'{"py/object": "unit.test_parser_proto2.PackableValue", "value": 1, '
+                                               b'"value_2": 2.0, "value_3": "test", "value_4": {"py/b64": "dGVzdA=="}, '
+                                               b'"value_5": true}')
+
+    encoded_message = proto_message.encode()
+    decoded_message = result.Example.decode(encoded_message)
+
+    assert proto_message == decoded_message
+    decoded_packable_value = decoded_message.example_any.unpack(PackableValue)
+    assert packable_value == decoded_packable_value
+
+    print('test_any_jsonpickle is valid!')
 
 
 def test_parser_oneof():

@@ -101,8 +101,16 @@ def _parse_packed_repeated(byte_blob: bytes, wire_type: WireType) -> list[int | 
 
 def _parse_length_delimited(byte_blob: bytes, index: int,
                             field_definition: DecoderFieldDefinition | dict | None) -> tuple[int, int]:
-    # The first byte of a length delimited value contains the length of the value.
-    length = byte_blob[index]
+    # The first bytes of a length delimited value contain the length of the value as a varint.
+    length_bytes, next_index = _get_relevant_bytes(byte_blob, index)
+    length = 0
+    for byte in reversed(length_bytes):
+        length = (length << 7) | (byte & value_mask)
+
+    # The next byte is the first byte of the length delimited value.
+    # The index is increased by 1 to skip the length byte.
+    # next_
+    index = next_index - 1
 
     if (field_definition and isinstance(field_definition, DecoderFieldDefinition)
             and field_definition.type == DecoderFieldType.REPEATED_PACKED):
@@ -119,7 +127,7 @@ def _parse_length_delimited(byte_blob: bytes, index: int,
         if '\\x' not in bytes_value.__repr__():
             return bytes_value.decode(), index + 1 + length
 
-        value = byte_blob[index + 1:index + 1 + length].hex()
+        value = bytes_value.hex()
     return value, index + 1 + length
 
 
